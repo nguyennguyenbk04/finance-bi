@@ -1,0 +1,50 @@
+Apache Doris Quick Start Guide
+===============================
+
+1. Download and Extract:
+   wget https://downloads.apache.org/doris/3.0.7/apache-doris-3.0.7-bin-x64.tar.gz
+   tar -xzf apache-doris-3.0.7-bin-x64.tar.gz
+   cd apache-doris-3.0.7-bin-x64
+
+2. System Tunings (Run as root/sudo):
+   # Disable swap
+   swapoff -a
+   nano /etc/fstab  # Comment out swap lines
+
+   # Set vm.max_map_count
+   echo "vm.max_map_count=2000000" >> /etc/sysctl.conf
+   sysctl -p
+
+   # Set file descriptors
+   echo "* soft nofile 1000000" >> /etc/security/limits.conf
+   echo "* hard nofile 1000000" >> /etc/security/limits.conf
+   ulimit -n 1000000
+
+3. Configure Doris:
+   # FE: Edit fe/conf/fe.conf, set meta_dir=/home/user/doris-meta
+   # BE: Edit be/conf/be.conf, set storage_root_path=/home/user/doris-storage
+
+4. Start FE:
+   ./fe/bin/start_fe.sh --daemon
+   # Verify: mysql -uroot -P9030 -h127.0.0.1 -e "show frontends;"
+
+5. Start BE:
+   ./be/bin/start_be.sh --daemon
+   # Verify: mysql -uroot -P9030 -h127.0.0.1 -e "show backends;"
+
+6. Register BE:
+   mysql -uroot -P9030 -h127.0.0.1
+   ALTER SYSTEM ADD BACKEND "127.0.0.1:9050";
+   SHOW BACKENDS;
+
+7. Create DW Database:
+   CREATE DATABASE fraud_dw;
+
+8. Load Data (from MySQL):
+   # Use Python/SQLAlchemy or Stream Load to import PaySim data.
+
+9. Stop Services:
+   ./fe/bin/stop_fe.sh
+   ./be/bin/stop_be.sh
+
+For issues, check logs in fe/log/ and be/log/.
