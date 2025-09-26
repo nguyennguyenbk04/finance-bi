@@ -26,3 +26,6 @@ sudo docker exec kafka /kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 
 # 8. Access MySQL
 # MySQL Workbench: localhost:30306, user: root, password: root123
 # Or via Docker: sudo docker exec -it mysql mysql -u root -p
+
+# 9. Access MinIO UI
+# Open http://localhost:9901
