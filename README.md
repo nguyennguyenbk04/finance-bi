@@ -146,15 +146,23 @@ Once all services are running, you can access the various UIs from your local ma
 ### MinIO Console (Data Lake)
 -   **URL:** `http://localhost:9901`
 -   **Credentials:** `minioadmin` / `minioadmin123`
--   **Description:** Browse the buckets and data files in your Data Lake. Navigate to the `rootdb` bucket to see the `transactions`, `users`, `cards` Delta tables.
+-   **Description:** Browse the buckets and data files in your Data Lake. Navigate to the `warehouse` bucket to see the `transactions`, `users`, `cards` Delta tables.
 
 ![MinIO Console](images/minio.png)
+
+![MinIO Fact](images/minio_fact.png)
 
 ### Kafka UI (Message Queue)
 -   **URL:** `http://localhost:9089`
 -   **Description:** Manage topics, view financial transaction messages as they are produced by Debezium, and monitor the health of the Kafka cluster.
 
 ![Kafka UI](images/kafka.png)
+
+### Spark UI (Data Processing)
+-   **URL:** `http://localhost:4040`
+-   **Description:** Monitor the Spark streaming job, view job stages, tasks, and performance metrics for the financial data processing.
+
+![Spark UI](images/spark.png)
 
 ### MySQL Database (Source Data)
 -   **Host:** `localhost:30306`
