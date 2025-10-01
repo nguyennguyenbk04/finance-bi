@@ -17,9 +17,18 @@ Instead of waiting for nightly batch reports, this system allows financial analy
 
 ## 3. Architecture Diagram
 
-The system's data flow follows a modern Lakehouse architecture for financial analytics.
+The system's data flow follows a modern Lakehouse architecture for financial analytics with both batch and streaming processing capabilities.
 
 ```
+BATCH PROCESSING:
++----------------+   ETL Jobs    +-----------------+   Processed    +-----------------+
+|                | -------------- |                 | -------------- |                 |
+|   CSV Files    | (Spark Batch)  | Data Validation | (Delta Lake)   | MinIO (S3)      |
+| (Historical)   |                | & Cleaning      |                | Lakehouse       |
+|                | <------------- |                 | <------------- |                 |
++----------------+                +-----------------+                +-----------------+
+
+STREAMING PROCESSING:
 +----------------+   CDC Events   +--------+   Raw Events   +-----------------+
 |                | -------------- |        | -------------- |                 |
 |     MySQL      | (Debezium)     | Kafka  |                | Spark Streaming |
