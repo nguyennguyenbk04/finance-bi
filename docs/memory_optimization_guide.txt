@@ -1,0 +1,235 @@
+FINANCE ANALYTICS - MEMORY OPTIMIZATION GUIDE
+==============================================
+
+PROBLEM: Kernel Dies / System Freezes During Preprocessing
+===========================================================
+
+SYMPTOMS:
+---------
+- Jupyter kernel dies during notebook execution
+- Computer freezes or becomes unresponsive
+- "Kernel died" error message
+- Partial data loaded into database
+- High RAM usage (80-100%)
+
+ROOT CAUSE:
+-----------
+The preprocessing notebook loads ALL data into memory at once:
+- 13+ million transaction records
+- ~8+ million fraud labels  
+- Multiple large CSV files loaded simultaneously
+
+This can easily consume 8-16GB of RAM, causing system freeze.
+
+
+SOLUTION 1: Process Data in Chunks (RECOMMENDED)
+==================================================
+
+Instead of loading entire files at once, process them in smaller batches.
+
+BEFORE (Memory Intensive):
+---------------------------
+df = pd.read_csv('transactions_data.csv')  # Loads ALL 13M rows
+df.to_sql('transactions', con=engine, if_exists='append', index=False)
+
+AFTER (Memory Efficient):
+--------------------------
+chunk_size = 100000  # Process 100K rows at a time
+
+for chunk in pd.read_csv('transactions_data.csv', chunksize=chunk_size):
+    # Process each chunk
+    chunk['amount'] = pd.to_numeric(chunk['amount'].str.replace('$', ''), errors='coerce')
+    chunk['trans_date'] = pd.to_datetime(chunk['trans_date'], errors='coerce')
+    
+    # Insert chunk to database
+    chunk.to_sql('transactions', con=engine, if_exists='append', index=False)
+    
+    print(f"Processed {len(chunk)} rows")
+
+BENEFITS:
+- Only 100K rows in memory at a time (instead of 13M)
+- Reduced RAM usage from ~8GB to ~100MB
+- No system freeze
+- Progress updates while processing
+
+
+SOLUTION 2: Increase Airflow Task Memory (If using Docker)
+============================================================
+
+Modify docker-compose.yml to allocate more memory to Airflow:
+
+services:
+  airflow:
+    ...
+    deploy:
+      resources:
+        limits:
+          memory: 8G    # Increase from default
+        reservations:
+          memory: 4G
+
+
+SOLUTION 3: Use Database-Side Processing
+==========================================
+
+Load data directly into database using LOAD DATA INFILE (MySQL):
+
+LOAD DATA LOCAL INFILE '/path/to/transactions_data.csv'
+INTO TABLE transactions
+FIELDS TERMINATED BY ',' 
+ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS;
+
+This bypasses Python/Pandas entirely and is much faster.
+
+
+SOLUTION 4: Reduce Dataset Size for Testing
+=============================================
+
+Create a sample dataset for development/testing:
+
+# Create 100K row sample from 13M rows
+head -100001 transactions_data.csv > transactions_sample.csv
+
+Use the sample for testing, full dataset for production.
+
+
+IMPLEMENTATION STEPS
+====================
+
+Step 1: Update preprocessing.ipynb
+-----------------------------------
+
+Replace the transactions loading cell with chunked processing:
+
+```python
+# POPULATE TRANSACTIONS TABLE - CHUNKED VERSION
+print("Loading transactions in chunks...")
+
+chunk_size = 100000  # Adjust based on available RAM
+total_rows = 0
+
+for i, chunk in enumerate(pd.read_csv('/opt/airflow/project_root/datasets/transactions_data.csv', 
+                                       chunksize=chunk_size)):
+    # Rename columns
+    chunk.rename(columns={'id': 'transaction_id', 'date': 'trans_date'}, inplace=True)
+    
+    # Clean amount field
+    chunk['amount'] = pd.to_numeric(chunk['amount'].astype(str).str.replace('$', ''), errors='coerce')
+    
+    # Convert datetime
+    chunk['trans_date'] = pd.to_datetime(chunk['trans_date'], errors='coerce')
+    
+    # Insert to database
+    chunk.to_sql('transactions', con=engine, if_exists='append', index=False)
+    
+    total_rows += len(chunk)
+    print(f"Chunk {i+1}: Processed {len(chunk)} rows (Total: {total_rows})")
+
+print(f"Completed! Total rows inserted: {total_rows}")
+```
+
+Step 2: Update fraud labels loading
+------------------------------------
+
+```python
+# POPULATE FRAUD_LABELS TABLE - OPTIMIZED VERSION
+print("Loading fraud labels in chunks...")
+
+# Load transaction IDs that exist in database
+chunk_size = 100000
+all_tx_ids = set()
+
+for chunk in pd.read_sql('SELECT transaction_id FROM transactions', con=engine, chunksize=chunk_size):
+    all_tx_ids.update(chunk['transaction_id'].tolist())
+
+print(f"Found {len(all_tx_ids)} transaction IDs in database")
+
+# Now process fraud labels in chunks
+labels_path = Path('/opt/airflow/project_root/datasets/train_fraud_labels.json')
+with labels_path.open('r') as f:
+    raw = json.load(f)
+
+# Process labels...
+df_labels = pd.DataFrame(list(labels.items()), columns=['transaction_id', 'label'])
+df_labels['transaction_id'] = pd.to_numeric(df_labels['transaction_id'], errors='coerce')
+df_labels = df_labels.dropna(subset=['transaction_id']).astype({'transaction_id': int})
+
+# Filter to only valid transaction IDs
+df_labels = df_labels[df_labels['transaction_id'].isin(all_tx_ids)]
+
+# Insert in chunks
+chunk_size = 50000
+for i in range(0, len(df_labels), chunk_size):
+    chunk = df_labels.iloc[i:i+chunk_size]
+    chunk.to_sql('fraud_labels', con=engine, if_exists='append', index=False)
+    print(f"Inserted fraud labels chunk {i//chunk_size + 1}")
+```
+
+
+MONITORING MEMORY USAGE
+========================
+
+Check memory during execution:
+
+# Inside notebook cell
+import psutil
+memory_info = psutil.virtual_memory()
+print(f"Memory used: {memory_info.percent}%")
+print(f"Available: {memory_info.available / (1024**3):.2f} GB")
+
+# From terminal
+docker stats airflow-standalone
+
+
+RECOMMENDED CHUNK SIZES BY RAM
+===============================
+
+System RAM    | Chunk Size
+--------------|------------
+4 GB          | 50,000
+8 GB          | 100,000
+16 GB         | 250,000
+32 GB+        | 500,000
+
+
+TROUBLESHOOTING
+===============
+
+Q: Still running out of memory?
+A: - Reduce chunk size
+   - Close other applications
+   - Increase Docker memory limits
+   - Process only essential columns
+
+Q: How to resume after crash?
+A: Check what's in the database:
+   SELECT COUNT(*) FROM transactions;
+   
+   Modify notebook to skip already loaded data:
+   - Use if_exists='append' (not 'replace')
+   - Check existing IDs before inserting
+
+Q: How long should it take?
+A: For 13M transactions:
+   - Chunked processing: 15-30 minutes
+   - Full load: May crash or take 1+ hour
+
+
+VERIFICATION
+============
+
+After successful processing:
+
+# Check row counts
+SELECT COUNT(*) as total_transactions FROM transactions;
+SELECT COUNT(*) as total_fraud_labels FROM fraud_labels;
+SELECT COUNT(*) as total_users FROM users;
+SELECT COUNT(*) as total_cards FROM cards;
+
+# Check memory usage
+docker stats airflow-standalone
+
+
+===============================================================================

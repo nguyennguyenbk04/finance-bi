@@ -18,21 +18,17 @@ INSERT INTO transactions (transaction_id, trans_date, client_id, card_id, amount
 VALUES (999999999999, '2000-01-01 00:00:00', 999999999999, 999999999999, 0.00, 'Dummy Transaction', 0, 999999999999, 'Dummy City', 'XX', '00000', 'Dummy record for topic initialization');
 
 
-INSERT INTO fraud_labels (transaction_id, label) 
-VALUES (999999999999, 'No');
+-- UPDATE users 
+-- SET current_age = 31, 
+--     yearly_income = 75000.00, 
+--     credit_score = 650,
+--     address = 'Updated Address 123'
+-- WHERE client_id = 999999999999;
 
-
-UPDATE users 
-SET current_age = 31, 
-    yearly_income = 75000.00, 
-    credit_score = 650,
-    address = 'Updated Address 123'
-WHERE client_id = 999999999999;
-
--- Update merchant type
-UPDATE mcc_codes 
-SET merchant_type = 'Updated Merchant Category'
-WHERE mcc = 999999999999;
+-- -- Update merchant type
+-- UPDATE mcc_codes 
+-- SET merchant_type = 'Updated Merchant Category'
+-- WHERE mcc = 999999999999;
 
 -- -- Update card information
 -- UPDATE cards 
@@ -58,7 +54,6 @@ WHERE mcc = 999999999999;
 
 
 
-DELETE FROM fraud_labels WHERE transaction_id = 999999999999;
 DELETE FROM transactions WHERE transaction_id = 999999999999;
 DELETE FROM cards WHERE card_id = 999999999999;
 DELETE FROM mcc_codes WHERE mcc = 999999999999;

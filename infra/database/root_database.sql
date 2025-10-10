@@ -1,4 +1,4 @@
-CREATE DATABASE finance;
+CREATE DATABASE IF NOT EXISTS finance;
 USE finance;
 
 CREATE TABLE users (
@@ -58,10 +58,4 @@ CREATE TABLE transactions (
     FOREIGN KEY (client_id) REFERENCES users(client_id),
     FOREIGN KEY (card_id) REFERENCES cards(card_id),
     FOREIGN KEY (mcc) REFERENCES mcc_codes(mcc)
-);
-
-CREATE TABLE fraud_labels (
-    transaction_id BIGINT PRIMARY KEY,
-    label ENUM('Yes','No') NOT NULL DEFAULT 'No',
-    FOREIGN KEY (transaction_id) REFERENCES transactions(transaction_id) ON DELETE CASCADE
 );

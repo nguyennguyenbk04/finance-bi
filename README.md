@@ -54,6 +54,7 @@ Streaming Data ──▶ MySQL ──▶ Debezium ──▶ Kafka ──▶ Spar
 | **Data Processing** | Apache Spark | 3.5.0 | Processes data streams from Kafka, applies financial analytics logic, and writes to Delta Lake. |
 | **Data Lake** | MinIO, Delta Lake | latest, 3.1.0 | Stores financial data as structured, versioned Delta tables. |
 | **Auxiliary Tools** | Kafka UI, MinIO Console | latest | Web UIs for managing and monitoring Kafka and MinIO. |
+| **Workflow Orchestration** | Apache Airflow | 2.8+ | Orchestrates and automates the finance analytics workflows, including batch processing and infrastructure management. |
 
 ## 5. Directory Structure
 ```
@@ -142,8 +143,19 @@ python src/stream_processing/rootdb_stream.py
 ```
 This terminal will now display the Spark processing logs showing financial data being processed.
 
-### Step 7: Monitor Real-time Processing
-To see the system in action, you can monitor the data flow through the various UIs while the streaming job processes financial transactions.
+### Step 8: Automate with Airflow (Optional)
+For production deployments, use Apache Airflow to automate the entire workflow:
+
+1. **Start Airflow**: Airflow is included in your Docker setup
+2. **Trigger Automation**: Run `./infra/airflow/scripts/trigger_workflow.sh`
+3. **Monitor Progress**: Visit `http://localhost:8080` to track execution
+
+The Airflow DAG (`infra/airflow/dags/finance_workflow_automation.py`) handles:
+- Infrastructure health checks
+- Kafka topic initialization
+- One-time notebook executions (with skip logic)
+- Scheduled data updates
+- Streaming job management
 
 ## 7. Accessing the User Interfaces (UIs)
 Once all services are running, you can access the various UIs from your local machine's web browser.
@@ -168,6 +180,12 @@ Once all services are running, you can access the various UIs from your local ma
 -   **Description:** Monitor the Spark streaming job, view job stages, tasks, and performance metrics for the financial data processing.
 
 ![Spark UI](images/spark.png)
+
+### Airflow UI (Workflow Orchestration)
+-   **URL:** `http://localhost:8080`
+-   **Description:** Monitor DAG execution, view logs, and manage finance analytics workflows.
+
+![Airflow UI](images/airflow.png)
 
 ### MySQL Database (Source Data)
 -   **Host:** `localhost:30306`

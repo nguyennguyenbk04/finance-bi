@@ -28,3 +28,4 @@ sudo docker exec kafka /kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 
    - Kafka UI: http://localhost:9089
    - Spark UI: http://localhost:4040
    - MinIO Console: http://localhost:9901
+   - Airflow UI: http://localhost:8082

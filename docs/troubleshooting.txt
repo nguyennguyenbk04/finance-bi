@@ -1,0 +1,291 @@
+FINANCE ANALYTICS WORKFLOW - TROUBLESHOOTING GUIDE
+===================================================
+
+This document describes common errors encountered during DAG execution and their solutions.
+
+===============================================================================
+ERROR 1: File Path Issues in Jupyter Notebooks
+===============================================================================
+
+SYMPTOM:
+--------
+Task "run_preprocessing" fails with error:
+  No such file or directory: '/home/bnguyen/Desktop/finance_analytics/datasets/users_data.csv'
+
+CAUSE:
+------
+Jupyter notebooks contain hardcoded absolute paths from the local development machine.
+When running inside Docker containers (Airflow), these local paths don't exist.
+
+The project is mounted to the Airflow container at: /opt/airflow/project_root/
+
+SOLUTION:
+---------
+Update all hardcoded paths in notebooks to use the container mount path:
+
+1. Replace local paths with container paths in all notebooks:
+   
+   FROM: /home/bnguyen/Desktop/finance_analytics/datasets/...
+   TO:   /opt/airflow/project_root/datasets/...
+
+2. Run this command to fix all notebooks automatically:
+   
+   find /home/bnguyen/Desktop/finance_analytics/src/batch_processing -name "*.ipynb" \
+     -exec sed -i "s|/home/bnguyen/Desktop/finance_analytics/|/opt/airflow/project_root/|g" {} \;
+
+3. Wait 30 seconds for Airflow to reload the changes
+
+4. Trigger the DAG again
+
+
+===============================================================================
+ERROR 2: Duplicate Entry in initialize_kafka_topics
+===============================================================================
+
+SYMPTOM:
+--------
+Task "initialize_kafka_topics" fails with error:
+  1062 (23000): Duplicate entry '999999999999' for key 'users.PRIMARY'
+
+CAUSE:
+------
+Dummy records from a previous run were not cleaned up properly.
+The function tries to INSERT records that already exist.
+
+SOLUTION:
+---------
+The function has been updated to be idempotent - it now:
+1. Deletes any existing dummy records BEFORE inserting
+2. Inserts dummy records
+3. Deletes dummy records after CDC processing
+
+If you still encounter this error, manually clean up:
+
+docker exec -i mysql mysql -u root -proot123 finance << 'EOF'
+DELETE FROM fraud_labels WHERE transaction_id = 999999999999;
+DELETE FROM transactions WHERE transaction_id = 999999999999;
+DELETE FROM cards WHERE card_id = 999999999999;
+DELETE FROM mcc_codes WHERE mcc = 999999999999;
+DELETE FROM users WHERE client_id = 999999999999;
+EOF
+
+
+===============================================================================
+ERROR 3: Docker Command Not Found in check_infrastructure_health
+===============================================================================
+
+SYMPTOM:
+--------
+Task "check_infrastructure_health" fails with error:
+  Command '['docker', 'ps', ...]' returned non-zero exit status 1
+
+CAUSE:
+------
+The original function tried to run Docker commands from inside a container.
+Docker CLI is not available inside the Airflow container.
+
+SOLUTION:
+---------
+The function has been updated to check service health via network connections
+instead of Docker commands. It now uses socket connections to verify that
+Kafka, MySQL, and MinIO are reachable.
+
+No action needed - this has been fixed in the updated DAG file.
+
+
+===============================================================================
+ERROR 4: Schedule Parameter Error
+===============================================================================
+
+SYMPTOM:
+--------
+DAG fails to load with error:
+  TypeError: DAG.__init__() got an unexpected keyword argument 'schedule_interval'
+
+CAUSE:
+------
+Using deprecated Airflow 1.x/2.x parameter 'schedule_interval' in Airflow 3.x
+
+SOLUTION:
+---------
+Replace 'schedule_interval' with 'schedule' in DAG definition:
+
+BEFORE:
+  dag = DAG(
+      'finance_analytics_workflow',
+      schedule_interval=None,
+      ...
+  )
+
+AFTER:
+  dag = DAG(
+      'finance_analytics_workflow',
+      schedule=None,
+      ...
+  )
+
+
+===============================================================================
+ERROR 5: Database Connection Issues
+===============================================================================
+
+SYMPTOM:
+--------
+Tasks fail with MySQL connection errors like:
+  Can't connect to MySQL server on 'localhost'
+  OperationalError: (2003, "Can't connect to MySQL server on 'localhost'")
+
+CAUSE:
+------
+Using 'localhost' or wrong port when connecting from inside containers.
+Containers must use service names defined in docker-compose.yml.
+
+SOLUTION:
+---------
+Always use container hostnames and internal ports for inter-container communication:
+
+MySQL connections:
+  host='localhost', port=30306  ❌ WRONG (host port mapping)
+  host='mysql', port=3306       ✅ CORRECT (internal container port)
+
+Kafka connections:
+  bootstrap_servers='localhost:9092'  ❌ WRONG
+  bootstrap_servers='kafka:9092'      ✅ CORRECT
+
+MinIO connections:
+  endpoint='http://localhost:9900'  ❌ WRONG (host port mapping)
+  endpoint='http://minio:9000'      ✅ CORRECT (internal container port)
+
+Quick fix for all notebooks and scripts:
+  
+  # Fix MySQL host and port
+  find src/batch_processing -name "*.ipynb" -exec sed -i "s/MYSQL_HOST = 'localhost'/MYSQL_HOST = 'mysql'/g" {} \;
+  find src/batch_processing -name "*.ipynb" -exec sed -i "s/MYSQL_PORT = '30306'/MYSQL_PORT = '3306'/g" {} \;
+  
+  # Fix MinIO endpoint
+  find src/batch_processing -name "*.ipynb" -exec sed -i "s|http://localhost:9900|http://minio:9000|g" {} \;
+  
+  # Fix Kafka in streaming script
+  sed -i 's/localhost:9092/kafka:9092/g' src/stream_processing/rootdb_stream.py
+  sed -i 's|http://localhost:9900|http://minio:9000|g' src/stream_processing/rootdb_stream.py
+
+
+===============================================================================
+ERROR 6: Notebook Execution Failures
+===============================================================================
+
+SYMPTOM:
+--------
+Tasks fail with error:
+  Failed to execute notebook: ...
+
+CAUSE:
+------
+Various reasons:
+- Missing Python packages in Airflow container
+- Incorrect paths
+- Database connection issues
+- Syntax errors in notebook cells
+
+SOLUTION:
+---------
+1. Check Airflow logs for specific error in the Web UI
+2. Ensure required packages are installed (configured in docker-compose.yml):
+   - mysql-connector-python
+   - nbconvert
+   - jupyter
+   - pandas, numpy, etc.
+
+3. Test notebook manually inside the container:
+   docker exec -it airflow-standalone bash
+   cd /opt/airflow/project_root/src/batch_processing
+   jupyter nbconvert --execute --to notebook --inplace preprocessing.ipynb
+
+
+===============================================================================
+GENERAL DEBUGGING TIPS
+===============================================================================
+
+1. CHECK DAG IMPORT ERRORS:
+   docker exec airflow-standalone airflow dags list-import-errors
+
+2. CHECK DAG STATE:
+   docker exec airflow-standalone airflow dags state finance_analytics_workflow <run_id>
+
+3. VIEW CONTAINER LOGS:
+   docker logs airflow-standalone --tail 100
+
+4. ACCESS AIRFLOW WEB UI:
+   http://localhost:8082
+   - Click on DAG > Task > Log to see detailed execution logs
+
+5. CHECK DATABASE CONNECTIVITY:
+   docker exec -i mysql mysql -u root -proot123 finance -e "SHOW TABLES;"
+
+6. LIST KAFKA TOPICS:
+   docker exec kafka kafka-topics.sh --bootstrap-server localhost:9092 --list
+
+7. CHECK RUNNING CONTAINERS:
+   docker ps
+
+8. RESTART INFRASTRUCTURE:
+   cd /home/bnguyen/Desktop/finance_analytics/infra
+   docker compose down
+   ./start_infra.sh
+
+
+===============================================================================
+DAG EXECUTION WORKFLOW
+===============================================================================
+
+The finance_analytics_workflow DAG executes tasks in this order:
+
+1. check_infrastructure_health
+   → Verifies Kafka, MySQL, MinIO are accessible
+
+2. initialize_kafka_topics  
+   → Inserts/deletes dummy MySQL records to create Kafka topics via CDC
+
+3. run_preprocessing
+   → Executes preprocessing.ipynb to clean and prepare data
+
+4. run_database_migration
+   → Executes database_migration.ipynb to populate MySQL with cleaned data
+
+5. run_dw_population
+   → Executes dw_population.ipynb to populate data warehouse
+
+6. run_streaming_job
+   → Starts rootdb_stream.py for real-time CDC processing
+
+7. final_status_check
+   → Displays completion message
+
+
+===============================================================================
+PATHS REFERENCE
+===============================================================================
+
+LOCAL MACHINE:
+- Project root: /home/bnguyen/Desktop/finance_analytics/
+- Datasets: /home/bnguyen/Desktop/finance_analytics/datasets/
+- Notebooks: /home/bnguyen/Desktop/finance_analytics/src/batch_processing/
+
+INSIDE AIRFLOW CONTAINER:
+- Project root: /opt/airflow/project_root/
+- Datasets: /opt/airflow/project_root/datasets/
+- Notebooks: /opt/airflow/project_root/src/batch_processing/
+- DAGs: /opt/airflow/dags/
+
+
+===============================================================================
+CONTACT & SUPPORT
+===============================================================================
+
+For additional help:
+- Check Airflow documentation: https://airflow.apache.org/docs/
+- Review Docker logs and container status
+- Verify network connectivity between containers
+- Ensure all services are healthy before triggering DAG
+
+===============================================================================

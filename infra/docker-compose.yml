@@ -6,6 +6,9 @@ services:
      - 2181:2181
      - 2888:2888
      - 3888:3888
+    networks:
+     - finance-network
+
   kafka:
     image: quay.io/debezium/kafka:${DEBEZIUM_VERSION}
     container_name: kafka
@@ -15,6 +18,10 @@ services:
      - zookeeper
     environment:
      - ZOOKEEPER_CONNECT=zookeeper:2181
+    networks:
+     - finance-network
+
+  # Kafka UI
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
@@ -25,6 +32,10 @@ services:
       - "${KAFKA_UI_PORT}:8080"
     links:
       - kafka
+    networks:
+      - finance-network
+
+  # MySQL
   mysql:
     image: mysql:8.0.35
     container_name: mysql
@@ -39,6 +50,16 @@ services:
       - --log-bin=mysql-bin
       - --binlog-format=row
       - --server-id=1
+      - --max_allowed_packet=256M
+      - --connect_timeout=600
+      - --net_read_timeout=600
+      - --net_write_timeout=600
+      - --wait_timeout=28800
+      - --interactive_timeout=28800
+      - --max_connections=500
+    networks:
+      - finance-network
+
   connect:
     image: quay.io/debezium/connect:${DEBEZIUM_VERSION}
     container_name: connect
@@ -53,7 +74,10 @@ services:
      - CONFIG_STORAGE_TOPIC=my_connect_configs
      - OFFSET_STORAGE_TOPIC=my_connect_offsets
      - STATUS_STORAGE_TOPIC=my_connect_statuses
+    networks:
+     - finance-network
 
+  # MinIO (S3-compatible storage)
   minio:
     image: minio/minio:latest
     container_name: minio
@@ -71,8 +95,10 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
+    networks:
+      - finance-network
 
-  # PostgreSQL for Airflow metadata
+  # PostgreSQL 
   postgres:
     image: postgres:13
     container_name: postgres
@@ -88,10 +114,15 @@ services:
       test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}"]
       interval: 5s
       retries: 5
+    networks:
+      - finance-network
 
-  # Airflow Standalone (Webserver + Scheduler + Database)
+    # Airflow Standalone (Webserver + Scheduler + Database)
   airflow:
-    image: apache/airflow:latest
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
+    image: airflow-pyspark:latest
     container_name: airflow-standalone
     depends_on:
       - postgres
@@ -104,14 +135,21 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
       AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
-      _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
     user: "${AIRFLOW_UID:-50000}:0"
     volumes:
       - ./airflow/dags:/opt/airflow/dags
+      - ..:/opt/airflow/project_root  # Mount the entire project root
+      - ../.airflow_cache:/opt/airflow/project_root/.airflow_cache
     ports:
       - "${AIRFLOW_PORT}:8080"
     restart: always
     command: standalone
+    networks:
+      - finance-network
+
+networks:
+  finance-network:
+    driver: bridge
 
 volumes:
   mysql_data:

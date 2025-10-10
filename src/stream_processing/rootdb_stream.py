@@ -77,10 +77,6 @@ def get_debezium_schema(table_name):
             acct_open_date:string,
             year_pin_last_changed:string,
             card_on_dark_web:string
-        """,
-        "fraud_labels": """
-            transaction_id:bigint,
-            label:string
         """
     }
     return table_schemas.get(table_name, "")
@@ -96,8 +92,7 @@ def get_table_columns(table_name):
                  "yearly_income", "total_debt", "credit_score", "num_credit_cards"],
         "cards": ["card_id", "client_id", "card_brand", "card_type", "card_number", "expires",
                  "cvv", "has_chip", "num_cards_issued", "credit_limit", "acct_open_date", 
-                 "year_pin_last_changed", "card_on_dark_web"],
-        "fraud_labels": ["transaction_id", "label"]
+                 "year_pin_last_changed", "card_on_dark_web"]
     }
     return columns.get(table_name, [])
 
@@ -107,8 +102,7 @@ def get_table_primary_key(table_name):
         "transactions": "transaction_id",
         "mcc_codes": "mcc", 
         "users": "client_id",
-        "cards": "card_id",
-        "fraud_labels": "transaction_id"
+        "cards": "card_id"
     }
     return primary_keys.get(table_name, "id")
 
@@ -210,7 +204,7 @@ def create_table_stream(table_name):
     
     print(f"Creating stream for table: {table_name}")
     
-    # Read from Kafka topic starting from latest offset (only new events)
+    # Read from Kafka topic starting from latest offset (only process CDC events that arrive after code starts)
     kafka_df = spark \
         .readStream \
         .format("kafka") \
@@ -279,8 +273,13 @@ def create_table_stream(table_name):
     # Union INSERT/UPDATE and DELETE operations
     all_operations_df = insert_update_df.unionByName(delete_df)
     
-    # Clear any existing checkpoint to ensure fresh start
+    # Use unique checkpoint path with timestamp to ensure fresh start from latest offset
     checkpoint_path = f"/tmp/checkpoints/{table_name}_cdc_{int(time.time())}"
+    
+    # Remove old checkpoint if it exists (force fresh start)
+    if os.path.exists(checkpoint_path):
+        shutil.rmtree(checkpoint_path)
+        print(f"[{table_name}] Cleared old checkpoint at {checkpoint_path}")
     
     # Write to Delta Lake using UPSERT pattern
     query = all_operations_df.writeStream \
@@ -294,8 +293,16 @@ def create_table_stream(table_name):
 def start_all_table_streams():
     """Start CDC streaming for all tables"""
     
+    # Clear all old checkpoints to ensure fresh start from latest offset
+    checkpoint_base = "/tmp/checkpoints/"
+    if os.path.exists(checkpoint_base):
+        print(f"Clearing all old checkpoints from {checkpoint_base}")
+        shutil.rmtree(checkpoint_base)
+        os.makedirs(checkpoint_base)
+        print("Old checkpoints cleared successfully")
+    
     # Define all tables to process
-    tables = ["transactions", "mcc_codes", "users", "cards", "fraud_labels"]
+    tables = ["transactions", "mcc_codes", "users", "cards"]
     
     queries = []
     
