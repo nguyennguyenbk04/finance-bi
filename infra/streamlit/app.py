@@ -6,7 +6,7 @@ import plotly.express as px
 
 # Page configuration
 st.set_page_config(
-    page_title="Finance Analytics Dashboard",
+    page_title="Dashboard",
     layout="wide"
 )
 
@@ -50,6 +50,44 @@ def get_total_transactions():
         st.error(f"Error loading transactions: {e}")
         return None
 
+@st.cache_data(ttl=60)
+def get_total_cards():
+    try:
+        df = spark.read.format("delta").load("s3a://rootdb/cards/")
+        return df.count()
+    except Exception as e:
+        st.error(f"Error loading cards: {e}")
+        return None
+
+@st.cache_data(ttl=60)
+def get_total_mcc_codes():
+    try:
+        df = spark.read.format("delta").load("s3a://rootdb/mcc_codes/")
+        return df.count()
+    except Exception as e:
+        st.error(f"Error loading MCC codes: {e}")
+        return None
+
+@st.cache_data(ttl=60)
+def get_total_unique_merchants():
+    try:
+        df = spark.read.format("delta").load("s3a://rootdb/transactions/")
+        return df.select("merchant_id").distinct().count()
+    except Exception as e:
+        st.error(f"Error loading unique merchants: {e}")
+        return None
+
+@st.cache_data(ttl=30)  # Shorter TTL for recent data
+def get_top_5_newest_transactions():
+    try:
+        df = spark.read.format("delta").load("s3a://rootdb/transactions/")
+        # Sort by trans_date descending and limit to 5
+        recent = df.orderBy(desc("trans_date")).limit(5).select("transaction_id", "trans_date", "client_id", "amount", "merchant_id", "mcc").toPandas()
+        return recent
+    except Exception as e:
+        st.error(f"Error loading recent transactions: {e}")
+        return None
+
 @st.cache_data(ttl=300)
 def get_transaction_volume_over_time():
     try:
@@ -81,15 +119,18 @@ def get_top_10_customers():
 page = st.sidebar.radio("Select Dashboard", ["Overview", "Dashboards"])
 
 # Dashboard title
-st.title("Finance Analytics Dashboard")
+st.title("Dashboards")
 
 if page == "Overview":
     # Get fresh data
     total_users = get_total_users()
     total_transactions = get_total_transactions()
+    total_cards = get_total_cards()
+    total_mcc = get_total_mcc_codes()
+    total_merchants = get_total_unique_merchants()
 
     # Display metrics in columns
-    col1, col2 = st.columns(2)
+    col1, col2, col3, col4, col5 = st.columns(5)
 
     with col1:
         if isinstance(total_users, int):
@@ -102,6 +143,32 @@ if page == "Overview":
             st.metric("Total Transactions", f"{total_transactions:,}")
         else:
             st.metric("Total Transactions", "Error")
+
+    with col3:
+        if isinstance(total_cards, int):
+            st.metric("Total Cards", f"{total_cards:,}")
+        else:
+            st.metric("Total Cards", "Error")
+
+    with col4:
+        if isinstance(total_mcc, int):
+            st.metric("Total MCC Codes", f"{total_mcc:,}")
+        else:
+            st.metric("Total MCC Codes", "Error")
+
+    with col5:
+        if isinstance(total_merchants, int):
+            st.metric("Total Unique Merchants", f"{total_merchants:,}")
+        else:
+            st.metric("Total Unique Merchants", "Error")
+
+    # Recent Transactions section
+    st.header("Top 5 Newest Transactions")
+    recent = get_top_5_newest_transactions()
+    if recent is not None and not recent.empty:
+        st.table(recent)
+    else:
+        st.warning("No recent transactions available.")
 
     # Status messages
     if isinstance(total_users, int) and total_users > 0:

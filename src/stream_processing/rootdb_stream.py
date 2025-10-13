@@ -137,10 +137,16 @@ def clean_problematic_fields(df, table_name):
                           .otherwise(col("credit_limit").cast("decimal(10,2)")))
     
     if table_name == "transactions":
-        # For transactions table, handle amount field
+        # For transactions table, handle amount field and convert trans_date from milliseconds to timestamp
         df = df.withColumn("amount", 
                           when(col("amount").rlike("^[A-Za-z0-9+/]*={0,2}$"), lit(0.00).cast("decimal(10,2)"))
-                          .otherwise(col("amount").cast("decimal(10,2)")))
+                          .otherwise(col("amount").cast("decimal(10,2)"))) \
+               .withColumn("trans_date",
+                          # Convert Debezium milliseconds timestamp to proper timestamp
+                          # Debezium MySQL connector sends DATETIME as milliseconds since epoch
+                          when(col("trans_date").isNotNull(), 
+                               (col("trans_date") / 1000).cast("timestamp"))
+                          .otherwise(lit(None).cast("timestamp")))
     
     return df
 

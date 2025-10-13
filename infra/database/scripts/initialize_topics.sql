@@ -15,7 +15,7 @@ VALUES (999999999999, 999999999999, 'Dummy', 'Dummy', '9999999999999999', '2099-
 
 
 INSERT INTO transactions (transaction_id, trans_date, client_id, card_id, amount, use_chip, merchant_id, mcc, merchant_city, merchant_state, zip, errors) 
-VALUES (999999999999, '2000-01-01 00:00:00', 999999999999, 999999999999, 0.00, 'Dummy Transaction', 0, 999999999999, 'Dummy City', 'XX', '00000', 'Dummy record for topic initialization');
+VALUES (999999999999, '2025-01-01 00:00:00', 999999999999, 999999999999, 0.00, 'Dummy Transaction', 0, 999999999999, 'Dummy City', 'XX', '00000', 'Dummy record for topic initialization');
 
 
 -- UPDATE users 
