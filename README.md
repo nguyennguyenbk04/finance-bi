@@ -55,6 +55,7 @@ Streaming Data ──▶ MySQL ──▶ Debezium ──▶ Kafka ──▶ Spar
 | **Data Lake** | MinIO, Delta Lake | latest, 3.1.0 | Stores financial data as structured, versioned Delta tables. |
 | **Auxiliary Tools** | Kafka UI, MinIO Console | latest | Web UIs for managing and monitoring Kafka and MinIO. |
 | **Workflow Orchestration** | Apache Airflow | 2.8+ | Orchestrates and automates the finance analytics workflows, including batch processing and infrastructure management. |
+| **Dashboard** | Streamlit | latest | Interactive web application for real-time financial analytics and visualizations. |
 
 ## 5. Directory Structure
 ```
@@ -66,6 +67,9 @@ Streaming Data ──▶ MySQL ──▶ Debezium ──▶ Kafka ──▶ Spar
 │   └── database/            # Database schemas, scripts, and initialization data.
 │       ├── schema.sql       # SQL statements for the initial database schema.
 │       └── scripts/         # Database maintenance and initialization scripts.
+│   └── streamlit/           # Interactive financial dashboard application.
+│       ├── app.py          # Main Streamlit application for real-time analytics.
+│       └── Dockerfile      # Docker configuration for Streamlit service.
 ├── src/                     # Source code for data processing.
 │   └── stream_processing/   # Contains Python scripts for Spark streaming.
 │       └── rootdb_stream.py # The main Spark job; processes financial data streams.
@@ -192,6 +196,12 @@ Once all services are running, you can access the various UIs from your local ma
 -   **Credentials:** `root` / `root123`
 -   **Description:** Connect directly to the source MySQL database to view or modify financial data.
 
+### Streamlit Dashboard (Financial Analytics)
+-   **URL:** `http://localhost:8501`
+-   **Description:** Interactive dashboard displaying real-time financial metrics, transaction volumes, and customer analytics from the Delta Lake.
+
+![Streamlit UI](images/streamlit.png)
+
 ## 8. Troubleshooting Common Issues
 - **`pull access denied` error during `docker compose up`:**
   - This is usually caused by Docker Hub's rate limiting. The most reliable fix is to create a free Docker Hub account and run `docker login` in your terminal.
@@ -208,7 +218,6 @@ This financial analytics platform can be extended with many real-world applicati
 -   **Customer Behavior Analytics:** Analyze spending patterns and provide personalized financial insights.
 -   **Risk Assessment Engine:** Calculate real-time credit risk scores based on transaction history.
 -   **Regulatory Reporting:** Automate compliance reporting with real-time data aggregation.
--   **Interactive Financial Dashboard:** Add Streamlit or similar for real-time financial visualizations.
 -   **Multi-tenant Architecture:** Support multiple financial institutions with isolated data processing.
 
 
