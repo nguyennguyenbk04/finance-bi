@@ -18,4 +18,4 @@ Thumbs.db
 datasets/
 *.csv
 *.json
-**/test_nb.ipynb
+test/
