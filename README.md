@@ -8,12 +8,7 @@ Instead of waiting for nightly batch reports, this system allows financial analy
 
 ## 2. Project Goals & Key Features
 
--   **Real-time Change Data Capture (CDC):** Automatically capture every change (INSERT, UPDATE, DELETE) from the MySQL database without altering the original application's logic.
--   **Multi-table Financial Data Processing:** Handle complex financial schemas including transactions, users, cards, MCC codes, and fraud labels.
--   **Stateful Stream Processing:** Apply complex financial analytics logic that requires maintaining state across different micro-batches of data.
--   **Lakehouse Architecture on Object Storage:** Utilize Delta Lake on MinIO to combine the cost-effective flexibility of a Data Lake with the reliability and performance of a Data Warehouse for financial data.
--   **Fully Containerized Environment:** The entire system is defined and orchestrated using Docker, ensuring consistency and ease of deployment across any environment (local, on-premise, cloud).
--   **Scalable by Design:** The architecture is built on components like Kafka and Spark, allowing it to scale out to handle larger financial data volumes in the future.
+This project is designed to enable real-time analytics for financial data by implementing **Change Data Capture (CDC)** to automatically capture INSERTs, UPDATEs, and DELETEs from the **MySQL** source without changing application code. It supports multi-table financial processing for complex schemas such as transactions, users, cards, MCC codes, and fraud labels, and it applies **stateful stream processing** so analytics logic can maintain context across micro-batches. The platform follows a lakehouse pattern on object storage (**Delta Lake** on **MinIO**) to combine the flexibility of a data lake with the reliability and performance of a data warehouse. All services are fully containerized with **Docker** and **Docker Compose** for consistent deployments, and the architecture is designed to scale using **Kafka** and **Spark** to handle larger data volumes as needed.
 
 ## 3. Architecture Diagram
 
@@ -53,6 +48,8 @@ Streaming Data ──▶ MySQL ──▶ Debezium ──▶ Kafka ──▶ Spar
 | **Message Queue** | Apache Kafka | 3.6+ | Central hub for ingesting and distributing financial data events. |
 | **Data Processing** | Apache Spark | 3.5.0 | Processes data streams from Kafka, applies financial analytics logic, and writes to Delta Lake. |
 | **Data Lake** | MinIO, Delta Lake | latest, 3.1.0 | Stores financial data as structured, versioned Delta tables. |
+| **Query Engine** | Dremio | latest | Fast query engine and data catalog that exposes Delta Lake tables via Flight/JDBC/ODBC and provides dataset reflections for performance. |
+| **BI / Visualization** | Superset | 3.x+ | Business intelligence platform for SQL exploration, dashboards and visualizations; connects to Dremio as a data source. |
 | **Auxiliary Tools** | Kafka UI, MinIO Console | latest | Web UIs for managing and monitoring Kafka and MinIO. |
 | **Workflow Orchestration** | Apache Airflow | 2.8+ | Orchestrates and automates the finance analytics workflows, including batch processing and infrastructure management. |
 | **Dashboard** | Streamlit | latest | Interactive web application for real-time financial analytics and visualizations. |
@@ -117,19 +114,31 @@ docker compose ps
 ```
 
 ### Step 4: Verify Platform Health
-The startup script automatically:
-- Initializes the MySQL database schema
-- Registers the Debezium CDC connector
-- Creates Kafka topics for financial data
+After the startup script completes, confirm that the core services are running and healthy. The script initializes the MySQL schema, registers the Debezium CDC connector, and creates the Kafka topics used by the pipeline. Start by listing the containers to check their status and any healthchecks:
 
-Check that everything is working:
 ```shell
-# Check Debezium connector status
-curl localhost:8083/connectors/finance-mysql-connector/status | jq
-
-# Check Kafka topics
-docker exec kafka kafka-topics.sh --bootstrap-server localhost:9092 --list
+docker compose ps
 ```
+
+To confirm the Debezium connector is running and to inspect its task state, request the connector status endpoint:
+
+```shell
+curl localhost:8083/connectors/finance-mysql-connector/status | jq
+```
+
+Verify the Kafka topics required by the pipeline exist and are accessible by querying the broker:
+
+```shell
+docker exec kafka kafka-topics.sh --bootstrap-server kafka:9092 --list
+```
+
+If any service appears unhealthy or a check fails, inspect the corresponding container logs to diagnose the issue, for example:
+
+```shell
+docker logs -f <service_name>
+```
+
+Replace `<service_name>` with the relevant container name such as `connect`, `kafka`, `mysql`, `dremio`, or `superset` when investigating failures.
 
 ### Step 5: Load Sample Financial Data (Optional)
 To populate the system with sample data for testing:
@@ -157,7 +166,7 @@ For production deployments, use Apache Airflow to automate the entire workflow:
 The Airflow DAG (`infra/airflow/dags/finance_workflow_automation.py`) handles:
 - Infrastructure health checks
 - Kafka topic initialization
-- One-time notebook executions (with skip logic)
+- One-time notebook executions
 - Scheduled data updates
 - Streaming job management
 
@@ -218,7 +227,15 @@ This financial analytics platform can be extended with many real-world applicati
 -   **Customer Behavior Analytics:** Analyze spending patterns and provide personalized financial insights.
 -   **Risk Assessment Engine:** Calculate real-time credit risk scores based on transaction history.
 -   **Regulatory Reporting:** Automate compliance reporting with real-time data aggregation.
--   **Multi-tenant Architecture:** Support multiple financial institutions with isolated data processing.
+    -   **Multi-tenant Architecture:** Support multiple financial institutions with isolated data processing.
+
+## 10. References and resources
+
+- Dataset (Kaggle): Transactions Fraud Datasets — https://www.kaggle.com/datasets/computingvictor/transactions-fraud-datasets
+- Dremio — Delta Lake format documentation: https://docs.dremio.com/cloud/sonar/query-manage/supported-data-formats/delta-lake/
+- Superset + Dremio connection resources:
+  - Superset + Dremio Docker image (AlexMerced): https://github.com/AlexMercedCoder/dremio-superset-docker-image/blob/main/dockerfile
+  - Superset database connection guide: https://superset.apache.org/docs/configuration/databases/
 
 
 

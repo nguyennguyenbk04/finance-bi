@@ -1,0 +1,5 @@
+# Init
+docker exec superset superset init
+
+# Connect to Dremio
+dremio+flight://dremio:dremio123@<Dremio_data_IP>:32010/?UseEncryption=false

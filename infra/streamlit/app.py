@@ -120,8 +120,27 @@ def get_top_10_customers():
         st.error(f"Error loading top customers: {e}")
         return None
 
+# New function to check if Delta table has been modified
+@st.cache_data(ttl=30)  # Cache this check briefly to avoid over-querying
+def get_table_last_modified(table_path):
+    try:
+        # Query Delta metadata for last modified timestamp
+        detail_df = spark.sql(f"DESCRIBE DETAIL delta.`{table_path}`")
+        last_modified = detail_df.select("lastModified").collect()[0][0]
+        return last_modified
+    except Exception as e:
+        st.error(f"Error checking table modification: {e}")
+        return None
+
 # Dashboard title
-st.title("Financial Analytics Dashboard")
+st.title("Live dashboard")
+
+# Initialize session state for tracking last modified times (if not already set)
+if "last_modified_transactions" not in st.session_state:
+    st.session_state.last_modified_transactions = None
+if "last_modified_users" not in st.session_state:
+    st.session_state.last_modified_users = None
+# Add for other tables as needed (cards, mcc_codes, etc.)
 
 # Get fresh data
 total_users = get_total_users()
@@ -198,7 +217,28 @@ if trends is not None and not trends.empty:
 else:
     st.warning("No transaction volume data available.")
 
-
-# Auto-refresh
-time.sleep(5)
-st.rerun()
+# Auto-refresh with change detection
+while True:
+    # Check for changes in key tables (e.g., transactions and users)
+    current_modified_transactions = get_table_last_modified("s3a://rootdb/transactions/")
+    current_modified_users = get_table_last_modified("s3a://rootdb/users/")
+    
+    # If any table has changed, clear caches and rerun
+    if (current_modified_transactions != st.session_state.last_modified_transactions or
+        current_modified_users != st.session_state.last_modified_users):
+        # Update session state
+        st.session_state.last_modified_transactions = current_modified_transactions
+        st.session_state.last_modified_users = current_modified_users
+        # Clear all cached data to force reload
+        get_total_users.clear()
+        get_total_transactions.clear()
+        get_total_cards.clear()
+        get_total_mcc_codes.clear()
+        get_total_unique_merchants.clear()
+        get_top_5_newest_transactions.clear()
+        get_transaction_volume_over_time.clear()
+        get_top_10_customers.clear()
+        get_table_last_modified.clear()  # Clear its own cache too
+        st.rerun()  # Only rerun if changes detected
+    else:
+        time.sleep(5)  # Wait 5 seconds before checking again

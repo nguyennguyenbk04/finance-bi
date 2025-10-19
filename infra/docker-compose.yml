@@ -166,11 +166,49 @@ services:
       timeout: 10s
       retries: 3
 
+  # Dremio 
+  dremio:
+    platform: linux/amd64
+    image: dremio/dremio-oss:latest
+    container_name: dremio
+    ports:
+      - "9047:9047"   
+      - "31010:31010" 
+      - "32010:32010" 
+    environment:
+      - DREMIO_FLIGHT_ENABLED=true  
+    volumes:
+      - dremio_data:/var/lib/dremio
+    networks:
+      - finance-network
+    depends_on:
+      - minio
+    healthcheck:
+      test: ["CMD", "sh", "-c", "curl -f http://localhost:9047/health && nc -z localhost 32010"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Superset - Dremio
+  superset:
+    image: alexmerced/dremio-superset
+    container_name: superset
+    ports:
+      - 8080:8088
+    depends_on:
+      - dremio
+    networks:
+      - finance-network
+
 networks:
   finance-network:
     driver: bridge
+    name: finance-network
 
 volumes:
   mysql_data:
   minio_data:
   postgres_data:
+  dremio_data:
+  superset_data:

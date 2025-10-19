@@ -214,7 +214,7 @@ def create_table_stream(table_name):
     
     print(f"Creating stream for table: {table_name}")
     
-    # Read from Kafka topic
+    # Read from Kafka topic - CHANGED: Use "latest" instead of "earliest" to process only new records
     kafka_df = spark \
         .readStream \
         .format("kafka") \
@@ -286,7 +286,7 @@ def create_table_stream(table_name):
     # Use unique checkpoint path with timestamp to ensure fresh start from latest offset
     checkpoint_path = f"/tmp/checkpoints/{table_name}_cdc_{int(time.time())}"
     
-    # Remove old checkpoint if it exists (force fresh start)
+    # Remove old checkpoint if it exists (force fresh start from latest)
     if os.path.exists(checkpoint_path):
         shutil.rmtree(checkpoint_path)
         print(f"[{table_name}] Cleared old checkpoint at {checkpoint_path}")
@@ -316,7 +316,7 @@ def start_all_table_streams():
     
     queries = []
     
-    print("Starting CDC streaming for all tables with decimal field fixes...")
+    print("Starting CDC streaming for all tables (processing only NEW records after script start)...")
     
     for table_name in tables:
         try:
@@ -329,8 +329,6 @@ def start_all_table_streams():
     return queries
 
 if __name__ == "__main__":
-    print("Starting fixed CDC streaming for all tables...")
-    
     # Start all streams
     active_queries = start_all_table_streams()
     

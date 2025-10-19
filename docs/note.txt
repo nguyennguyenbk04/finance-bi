@@ -34,4 +34,6 @@ sudo docker exec kafka /kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 
    - MinIO Console: http://localhost:9901
    - Airflow UI: http://localhost:8082
    - Streamlit: http://localhost:8501
+   - Dremio: http://localhost:9047
+   - Superset: http://localhost:8080
   
