@@ -19,3 +19,7 @@ datasets/
 *.csv
 *.json
 test/*
+model/spark-venv-py310
+model/spark_fraud_rf_model
+model/sparkFraudRfModel
+model/prediction_output
